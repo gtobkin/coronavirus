@@ -70,7 +70,6 @@ def display_ebola_plots():
     dates = data["date"].values
     datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
     days_elapsed = [(date - min(datetimes)).days for date in datetimes]
-    days_elapsed_np = np.array(days_elapsed).reshape(-1,1)
 
     # queue up plots - we'll add scatter plots and fits as we go
     fig, axs = plt.subplots(2, sharex=True)  # two vertically-stacked subplots
@@ -89,7 +88,7 @@ def display_ebola_plots():
             "sierraleone": ["black", "black"],
             }
     p0 = [[2.2e-02, 2.3e+02, 2.0e+04],
-          [1.2e-02, 2.0e+02, 1.1e+04]]
+          [1.2e-02, 2.0e+02, 1.1e+04]]  # from observation from previous runs with no p0
     for kind in ["cases", "deaths"]:
         isdeaths = 1 if kind == "deaths" else 0
         results["popt"][kind] = {}
@@ -117,7 +116,59 @@ def display_ebola_plots():
     return
 
 
+def display_ebola_quadratic_samples():
+    # Load data from CSV
+    data = pd.read_csv("data/ebola_2014_data.csv")
+
+    # Convert dates from strings to datetimes
+    dates = data["date"].values
+    datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
+    days_elapsed = [(date - min(datetimes)).days for date in datetimes]
+
+    # set per-kind, per-loc caps on x to limit ourselves to exponential growth phase; determined by inspection
+    caps = {
+            "cases": { "total": 440, "guinea": 410, "liberia": 435, "sierraleone": 425, },
+            "deaths": { "total": 435, "guinea": 400, "liberia": 465, "sierraleone": 420, },
+        }
+
+
+
+
+
 if __name__ == "__main__":
-    # display_evdefender_plots()
+    display_evdefender_plots()
     display_ebola_plots()
+    display_ebola_quadratic_samples()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
