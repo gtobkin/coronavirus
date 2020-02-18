@@ -6,6 +6,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 import datetime
 from scipy.optimize import curve_fit
+from sklearn.metrics import r2_score
 
 def display_evdefender_plots():
     # Load and select data from CSV
@@ -71,43 +72,49 @@ def display_ebola_plots():
     days_elapsed = [(date - min(datetimes)).days for date in datetimes]
     days_elapsed_np = np.array(days_elapsed).reshape(-1,1)
 
+    # queue up plots - we'll add scatter plots and fits as we go
+    fig, axs = plt.subplots(2, sharex=True)  # two vertically-stacked subplots
+    fig.suptitle("Ebola cases and death fits")
+
+    x = days_elapsed
+
     # compute sigmoid fits for cases and deaths, for all four locs
     def fsigmoid(x, a, b, c):
         return c / (1 + np.exp(-a*(x-b)))
-    results = {"popt": {}, "pcov": {}}
-    for loc in ["total", "guinea", "liberia", "sierraleone"]:
-        results["popt"][loc] = {}
-        results["pcov"][loc] = {}
-        for kind in ["cases", "deaths"]:
+    results = {"popt": {}, "pcov": {}, "labels": {}}
+    colors = {
+            "total": ["blue", "blue"],
+            "guinea": ["red", "red"],
+            "liberia": ["green", "green"],
+            "sierraleone": ["black", "black"],
+            }
+    p0 = [[2.2e-02, 2.3e+02, 2.0e+04],
+          [1.2e-02, 2.0e+02, 1.1e+04]]
+    for kind in ["cases", "deaths"]:
+        isdeaths = 1 if kind == "deaths" else 0
+        results["popt"][kind] = {}
+        results["pcov"][kind] = {}
+        results["labels"][kind] = {}
+        patches = []
+        for loc in colors.keys():
             y = data["{}_{}".format(kind, loc)].values
-            popt, pcov = curve_fit(fsigmoid, days_elapsed, y)
-            results["popt"][loc][kind] = popt
-            results["pcov"][loc][kind] = pcov
-    print(results)
-    return
+            popt, pcov = curve_fit(fsigmoid, days_elapsed, y, p0 = p0[isdeaths])
+            results["popt"][kind][loc] = popt
+            results["pcov"][kind][loc] = pcov
 
+            axs[isdeaths].scatter(x, y, color = colors[loc][0])
+            y_predicted = [fsigmoid(x_i, popt[0], popt[1], popt[2]) for x_i in x]
+            axs[isdeaths].plot(x, y_predicted, color = colors[loc][1])
 
-    # y_cases = data["cases_total"].values.reshape(-1,1)
-    y_cases = data["cases_total"].values
-    # y_deaths = data["deaths_total"].values.reshape(-1,1)
-    
-    # Fit logistic model to cases data
-    popt, pcov = curve_fit(fsigmoid, days_elapsed, y_cases)
-    print(popt, pcov)
-    return
+            label = "{}: {}/(1 + exp({}*(x-{})))".format(loc, round(popt[2], 3), round(popt[0], 3), round(popt[1], 3))
+            label += "; R2 = {}".format(round(r2_score(y, y_predicted), 4))
+            results["labels"][kind][loc] = label
+            patches.append(mpatches.Patch(color=colors[loc][1], label=label))
+        axs[isdeaths].legend(handles=patches)
 
-
-
-
-
-
-    from sklearn.linear_model import LogisticRegression
-    log_reg_cases = LogisticRegression().fit(days_elapsed_np, y_cases)
-
-    # Fit logistic model to deaths data
-
-    plt.scatter(days_elapsed_np, y_cases, color="blue")
+    # Plot cases and death fits
     plt.show()
+    return
 
 
 if __name__ == "__main__":
