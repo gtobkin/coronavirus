@@ -2,56 +2,115 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches  # for legends
 import pandas as pd
-
-# Load and select data from CSV
-data = pd.read_csv("data/coronavirus_data.csv")
-
-window = data[["date", "cases_china_ex", "deaths_china_ex"]][7:14]
-
-y_cases = window["cases_china_ex"].values.reshape(-1,1)
-y_deaths = window["deaths_china_ex"].values.reshape(-1,1)
-x = np.array(range(len(y_cases))).reshape(-1,1)
-
 from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+import datetime
+from scipy.optimize import curve_fit
 
-# Fit quadratic model to cases data
-poly_cases = PolynomialFeatures(degree = 2)
-x_poly_cases = poly_cases.fit_transform(x)
-poly_cases.fit(x_poly_cases, y_cases)
-lin2_reg_cases = LinearRegression().fit(x_poly_cases, y_cases)
+def display_evdefender_plots():
+    # Load and select data from CSV
+    data = pd.read_csv("data/coronavirus_data.csv")
+    
+    window = data[["date", "cases_china_ex", "deaths_china_ex"]][7:14]
+    
+    y_cases = window["cases_china_ex"].values.reshape(-1,1)
+    y_deaths = window["deaths_china_ex"].values.reshape(-1,1)
+    x = np.array(range(len(y_cases))).reshape(-1,1)
+    
+    # Fit quadratic model to cases data
+    poly_cases = PolynomialFeatures(degree = 2)
+    x_poly_cases = poly_cases.fit_transform(x)
+    poly_cases.fit(x_poly_cases, y_cases)
+    lin2_reg_cases = LinearRegression().fit(x_poly_cases, y_cases)
+    
+    # Fit quadratic model to deaths data
+    poly_deaths = PolynomialFeatures(degree = 2)
+    x_poly_deaths = poly_deaths.fit_transform(x)
+    poly_deaths.fit(x_poly_deaths, y_deaths)
+    lin2_reg_deaths = LinearRegression().fit(x_poly_deaths, y_deaths)
+    
+    # Calculate coeffs and R2 for both
+    r2_cases = lin2_reg_cases.score(poly_cases.fit_transform(x), y_cases)
+    coeffs_cases = lin2_reg_cases.coef_
+    r2_deaths = lin2_reg_deaths.score(poly_deaths.fit_transform(x), y_deaths)
+    coeffs_deaths = lin2_reg_deaths.coef_
+    
+    # Plot cases and death fits
+    fig, axs = plt.subplots(2, sharex=True)  # two vertically-stacked subplots
+    fig.suptitle("Quadratic fits and R2 scores")
+    
+    axs[0].scatter(x, y_cases, color = "blue")
+    axs[0].plot(x, lin2_reg_cases.predict(poly_cases.fit_transform(x)), color = 'red')
+    axs[0].set(ylabel = "Confirmed China Cases ex-HK, Macau, Taipei")
+    label = "{}d^2 + {}d + {}".format(round(coeffs_cases[0][0], 3), round(coeffs_cases[0][1], 3), round(coeffs_cases[0][2], 3))
+    label += "; R2 = {}".format(round(r2_cases, 5))
+    patch_cases = mpatches.Patch(color='red', label=label)
+    axs[0].legend(handles=[patch_cases])
+    axs[0].grid(axis='y')
+    
+    axs[1].scatter(x, y_deaths, color = "blue")
+    axs[1].plot(x, lin2_reg_deaths.predict(poly_deaths.fit_transform(x)), color = 'red')
+    axs[1].set(xlabel = "Days")
+    axs[1].set(ylabel = "Confirmed China Deaths ex-HK, Macau, Taipei")
+    label = "{}d^2 + {}d + {}".format(round(coeffs_deaths[0][0], 3), round(coeffs_deaths[0][1], 3), round(coeffs_deaths[0][2], 3))
+    label += "; R2 = {}".format(round(r2_deaths, 5))
+    patch_deaths = mpatches.Patch(color='red', label=label)
+    axs[1].legend(handles=[patch_deaths])
+    axs[1].grid(axis='y')
+    
+    plt.show()
 
-# Fit quadratic model to deaths data
-poly_deaths = PolynomialFeatures(degree = 2)
-x_poly_deaths = poly_deaths.fit_transform(x)
-poly_deaths.fit(x_poly_deaths, y_deaths)
-lin2_reg_deaths = LinearRegression().fit(x_poly_deaths, y_deaths)
 
-# Calculate coeffs and R2 for both
-r2_cases = lin2_reg_cases.score(poly_cases.fit_transform(x), y_cases)
-coeffs_cases = lin2_reg_cases.coef_
-r2_deaths = lin2_reg_deaths.score(poly_deaths.fit_transform(x), y_deaths)
-coeffs_deaths = lin2_reg_deaths.coef_
+def display_ebola_plots():
+    # Load data from CSV
+    data = pd.read_csv("data/ebola_2014_data.csv")
+    
+    # Convert dates from strings to datetimes
+    dates = data["date"].values
+    datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
+    days_elapsed = [(date - min(datetimes)).days for date in datetimes]
+    days_elapsed_np = np.array(days_elapsed).reshape(-1,1)
 
-# Plot cases and death fits
-fig, axs = plt.subplots(2, sharex=True)  # two vertically-stacked subplots
-fig.suptitle("Quadratic fits and R2 scores")
+    # compute sigmoid fits for cases and deaths, for all four locs
+    def fsigmoid(x, a, b, c):
+        return c / (1 + np.exp(-a*(x-b)))
+    results = {"popt": {}, "pcov": {}}
+    for loc in ["total", "guinea", "liberia", "sierraleone"]:
+        results["popt"][loc] = {}
+        results["pcov"][loc] = {}
+        for kind in ["cases", "deaths"]:
+            y = data["{}_{}".format(kind, loc)].values
+            popt, pcov = curve_fit(fsigmoid, days_elapsed, y)
+            results["popt"][loc][kind] = popt
+            results["pcov"][loc][kind] = pcov
+    print(results)
+    return
 
-axs[0].scatter(x, y_cases, color = "blue")
-axs[0].plot(x, lin2_reg_cases.predict(poly_cases.fit_transform(x)), color = 'red')
-axs[0].set(ylabel = "Confirmed China Cases ex-HK, Macau, Taipei")
-label = "{}d^2 + {}d + {}".format(round(coeffs_cases[0][0], 3), round(coeffs_cases[0][1], 3), round(coeffs_cases[0][2], 3))
-label += "; R2 = {}".format(round(r2_cases, 5))
-patch_cases = mpatches.Patch(color='red', label=label)
-axs[0].legend(handles=[patch_cases])
-axs[0].grid(axis='y')
 
-axs[1].scatter(x, y_deaths, color = "blue")
-axs[1].plot(x, lin2_reg_deaths.predict(poly_deaths.fit_transform(x)), color = 'red')
-axs[1].set(xlabel = "Days")
-axs[1].set(ylabel = "Confirmed China Deaths ex-HK, Macau, Taipei")
-label = "{}d^2 + {}d + {}".format(round(coeffs_deaths[0][0], 3), round(coeffs_deaths[0][1], 3), round(coeffs_deaths[0][2], 3))
-label += "; R2 = {}".format(round(r2_deaths, 5))
-patch_deaths = mpatches.Patch(color='red', label=label)
-axs[1].legend(handles=[patch_deaths])
-axs[1].grid(axis='y')
+    # y_cases = data["cases_total"].values.reshape(-1,1)
+    y_cases = data["cases_total"].values
+    # y_deaths = data["deaths_total"].values.reshape(-1,1)
+    
+    # Fit logistic model to cases data
+    popt, pcov = curve_fit(fsigmoid, days_elapsed, y_cases)
+    print(popt, pcov)
+    return
+
+
+
+
+
+
+    from sklearn.linear_model import LogisticRegression
+    log_reg_cases = LogisticRegression().fit(days_elapsed_np, y_cases)
+
+    # Fit logistic model to deaths data
+
+    plt.scatter(days_elapsed_np, y_cases, color="blue")
+    plt.show()
+
+
+if __name__ == "__main__":
+    # display_evdefender_plots()
+    display_ebola_plots()
 
