@@ -121,18 +121,40 @@ def display_ebola_quadratic_samples():
     data = pd.read_csv("data/ebola_2014_data.csv")
 
     # Convert dates from strings to datetimes
-    dates = data["date"].values
+    dates = data["date"][::-1].values
     datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
     days_elapsed = [(date - min(datetimes)).days for date in datetimes]
 
     # set per-kind, per-loc caps on x to limit ourselves to exponential growth phase; determined by inspection
+    # (2-3 readings before report-by-report change in cases/deaths peaked)
     caps = {
             "cases": { "total": 440, "guinea": 410, "liberia": 435, "sierraleone": 425, },
             "deaths": { "total": 435, "guinea": 400, "liberia": 465, "sierraleone": 420, },
         }
 
+    # for each kind/loc combo, for each 6-long range of in-window reports, compute an R2 for a quadratic fit
+    r2s = []
+    for kind in ["cases", "deaths"]:
+        for loc in ["total", "guinea", "liberia", "sierraleone"]:
+            y_full = data["{}_{}".format(kind,loc)][::-1].values
+            for i_min in [x for x in range(len(days_elapsed) - 5) if days_elapsed[x] <= caps[kind][loc] and y_full[x] > 0]:
+                x = np.array(days_elapsed[i_min:i_min+6]).reshape(-1,1)
+                y = y_full[i_min:i_min+6]
+                poly = PolynomialFeatures(degree = 2)
+                x_poly = poly.fit_transform(x)
+                poly.fit(x_poly, y)
+                lin2_reg = LinearRegression().fit(x_poly, y)
 
-
+                r2 = lin2_reg.score(poly.fit_transform(x), y)
+                r2s.append(r2)
+                # coeffs = lin2_reg.coef_
+    # logbins = np.geomspace(min(r2s), 1.0, 20)
+    # logbins = np.logspace(np.log10(0.99), np.log10(1.0), 50)
+    # logbins = np.logspace(-0.01, 0, base = 10000, num = 50)
+    plt.hist(r2s, bins=20, range=[0.999, 1.000])
+    plt.xscale('log')
+    plt.show()
+                
 
 
 if __name__ == "__main__":
