@@ -1,4 +1,5 @@
 import numpy as np
+from matplotlib.ticker import NullFormatter, FormatStrFormatter, StrMethodFormatter
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches  # for legends
 import pandas as pd
@@ -7,6 +8,7 @@ from sklearn.linear_model import LinearRegression
 import datetime
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
+from math import floor
 
 def display_evdefender_plots():
     # Load and select data from CSV
@@ -42,7 +44,7 @@ def display_evdefender_plots():
     
     axs[0].scatter(x, y_cases, color = "blue")
     axs[0].plot(x, lin2_reg_cases.predict(poly_cases.fit_transform(x)), color = 'red')
-    axs[0].set(ylabel = "Confirmed China Cases ex-HK, Macau, Taipei")
+    axs[0].set(ylabel = "Confirmed China Cases\nex-HK, Macau, Taipei")
     label = "{}d^2 + {}d + {}".format(round(coeffs_cases[0][0], 3), round(coeffs_cases[0][1], 3), round(coeffs_cases[0][2], 3))
     label += "; R2 = {}".format(round(r2_cases, 5))
     patch_cases = mpatches.Patch(color='red', label=label)
@@ -52,7 +54,7 @@ def display_evdefender_plots():
     axs[1].scatter(x, y_deaths, color = "blue")
     axs[1].plot(x, lin2_reg_deaths.predict(poly_deaths.fit_transform(x)), color = 'red')
     axs[1].set(xlabel = "Days")
-    axs[1].set(ylabel = "Confirmed China Deaths ex-HK, Macau, Taipei")
+    axs[1].set(ylabel = "Confirmed China Deaths\nex-HK, Macau, Taipei")
     label = "{}d^2 + {}d + {}".format(round(coeffs_deaths[0][0], 3), round(coeffs_deaths[0][1], 3), round(coeffs_deaths[0][2], 3))
     label += "; R2 = {}".format(round(r2_deaths, 5))
     patch_deaths = mpatches.Patch(color='red', label=label)
@@ -147,14 +149,25 @@ def display_ebola_quadratic_samples():
 
                 r2 = lin2_reg.score(poly.fit_transform(x), y)
                 r2s.append(r2)
-                # coeffs = lin2_reg.coef_
-    # logbins = np.geomspace(min(r2s), 1.0, 20)
-    # logbins = np.logspace(np.log10(0.99), np.log10(1.0), 50)
-    # logbins = np.logspace(-0.01, 0, base = 10000, num = 50)
-    plt.hist(r2s, bins=20, range=[0.999, 1.000])
-    plt.xscale('log')
+    x = np.array(r2s)
+    np.random.seed(0)  # make the jitter deterministic
+    y = np.random.normal(0, 1, len(x))
+    fig, ax = plt.subplots()
+    ax.set_xscale('logit')
+    ax.set_yticks([])
+    ax.scatter(x, y, alpha=0.4)
+    ax.set_ylim([-10, 10])
+    ax.xaxis.set_major_formatter(FormatStrFormatter('%.4g'))
+    ax.xaxis.set_minor_formatter(NullFormatter())
+    ax.set_xticks([floor(min(r2s)*10.0) / 10, 0.9, 0.99, 0.999, 0.9999])
+    # add the two points for @evdefender's cases and deaths R2 scores
+    x = np.array([0.9999, 0.9997])
+    y = np.zeros_like(x)
+    ax.scatter(x, y, color='red', marker='^')
+    ax.annotate("Feb 2 China\ncases R2", (x[0], y[0]), textcoords="offset pixels", xytext=(0,-40), ha="center", color="red", fontsize=9, weight="bold")
+    ax.annotate("Feb 2 China\ndeaths R2", (x[1], y[1]), textcoords="offset pixels", xytext=(0,-40), ha="center", color="red", fontsize=9, weight="bold")
     plt.show()
-                
+    return
 
 
 if __name__ == "__main__":
