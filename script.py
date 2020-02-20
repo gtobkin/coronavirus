@@ -7,61 +7,57 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 import datetime
 from scipy.optimize import curve_fit
+
 from sklearn.metrics import r2_score
 from math import floor
 
 def display_evdefender_plots():
     # Load and select data from CSV
     data = pd.read_csv("data/coronavirus_data.csv")
-    
+
+    # select data for [Jan 27, Feb 2], matching @evdefender's second plot
     window = data[["date", "cases_china_ex", "deaths_china_ex"]][7:14]
-    
-    y_cases = window["cases_china_ex"].values.reshape(-1,1)
-    y_deaths = window["deaths_china_ex"].values.reshape(-1,1)
-    x = np.array(range(len(y_cases))).reshape(-1,1)
-    
-    # Fit quadratic model to cases data
-    poly_cases = PolynomialFeatures(degree = 2)
-    x_poly_cases = poly_cases.fit_transform(x)
-    poly_cases.fit(x_poly_cases, y_cases)
-    lin2_reg_cases = LinearRegression().fit(x_poly_cases, y_cases)
-    
-    # Fit quadratic model to deaths data
-    poly_deaths = PolynomialFeatures(degree = 2)
-    x_poly_deaths = poly_deaths.fit_transform(x)
-    poly_deaths.fit(x_poly_deaths, y_deaths)
-    lin2_reg_deaths = LinearRegression().fit(x_poly_deaths, y_deaths)
-    
-    # Calculate coeffs and R2 for both
-    r2_cases = lin2_reg_cases.score(poly_cases.fit_transform(x), y_cases)
-    coeffs_cases = lin2_reg_cases.coef_
-    r2_deaths = lin2_reg_deaths.score(poly_deaths.fit_transform(x), y_deaths)
-    coeffs_deaths = lin2_reg_deaths.coef_
-    
-    # Plot cases and death fits
+
+    # Fit quadratic and exp models to cases and deaths timeseries; find coeffs and R2s
+    x = list(range(len(window)))  # 7 datapoints
+    y, y_predicted, popt, r2, label = ({}, {}, {}, {}, {})
+    def fquadratic(x, a, b, c):
+        return a*x**2 + b*x + c
+    def fexp(x, a, b):
+        return a*(1+b)**x
+    for fittype in ["quad", "exp"]:
+        callback = fquadratic if fittype == "quad" else fexp
+        y_predicted[fittype], popt[fittype], r2[fittype], label[fittype] = ({}, {}, {}, {})
+        for kind in ["cases", "deaths"]:
+            y[kind] = window["{}_china_ex".format(kind)].values
+            popt[fittype][kind], _ = curve_fit(callback, x, y[kind])
+            if fittype == "quad":
+                y_predicted[fittype][kind] = [callback(x_i, popt[fittype][kind][0], popt[fittype][kind][1], popt[fittype][kind][2]) for x_i in x]
+                label[fittype][kind] = "{}d^2 + {}d + {}".format(round(popt[fittype][kind][0], 2), round(popt[fittype][kind][1], 1), round(popt[fittype][kind][2], 1))
+            elif fittype == "exp":
+                y_predicted[fittype][kind] = [callback(x_i, popt[fittype][kind][0], popt[fittype][kind][1]) for x_i in x]
+                label[fittype][kind] = "{}*(1+{})^d".format(round(popt[fittype][kind][0], 2), round(popt[fittype][kind][1], 4))
+            r2[fittype][kind] = r2_score(y[kind], y_predicted[fittype][kind])
+            label[fittype][kind] += "; R2 = {}".format(round(r2[fittype][kind], 5))
+
+    # Plot fits for cases and deaths timeseries
     fig, axs = plt.subplots(2, sharex=True)  # two vertically-stacked subplots
     fig.suptitle("Quadratic fits and R2 scores")
-    
-    axs[0].scatter(x, y_cases, color = "blue")
-    axs[0].plot(x, lin2_reg_cases.predict(poly_cases.fit_transform(x)), color = 'red')
-    axs[0].set(ylabel = "Confirmed China Cases\nex-HK, Macau, Taipei")
-    label = "{}d^2 + {}d + {}".format(round(coeffs_cases[0][0], 3), round(coeffs_cases[0][1], 3), round(coeffs_cases[0][2], 3))
-    label += "; R2 = {}".format(round(r2_cases, 5))
-    patch_cases = mpatches.Patch(color='red', label=label)
-    axs[0].legend(handles=[patch_cases])
-    axs[0].grid(axis='y')
-    
-    axs[1].scatter(x, y_deaths, color = "blue")
-    axs[1].plot(x, lin2_reg_deaths.predict(poly_deaths.fit_transform(x)), color = 'red')
-    axs[1].set(xlabel = "Days")
-    axs[1].set(ylabel = "Confirmed China Deaths\nex-HK, Macau, Taipei")
-    label = "{}d^2 + {}d + {}".format(round(coeffs_deaths[0][0], 3), round(coeffs_deaths[0][1], 3), round(coeffs_deaths[0][2], 3))
-    label += "; R2 = {}".format(round(r2_deaths, 5))
-    patch_deaths = mpatches.Patch(color='red', label=label)
-    axs[1].legend(handles=[patch_deaths])
-    axs[1].grid(axis='y')
-    
+    for i, kind in enumerate(["cases", "deaths"]):
+        axs[i].scatter(x, y[kind], color='blue')
+        axs[i].set(ylabel="Confirmed China {}\nex-HK, Macau, Taipei".format(kind.capitalize()))
+        axs[i].grid(axis='y')
+        patches = []
+        for fittype in ["quad", "exp"]:
+            fittype_color = 'red' if fittype == "quad" else 'green'
+            axs[i].plot(x, y_predicted[fittype][kind], color=fittype_color)
+            patches.append(mpatches.Patch(color=fittype_color, label=label[fittype][kind]))
+        axs[i].legend(handles=patches)
+    axs[0].set_xticks(x)
+    axs[0].set_xticklabels(["Jan {}".format(k) for k in range(27, 32)] + ["Feb {}".format(k) for k in range(1, 3)])
+
     plt.show()
+    return r2
 
 
 def display_ebola_plots():
@@ -171,7 +167,7 @@ def display_ebola_quadratic_samples():
 
 
 if __name__ == "__main__":
-    display_evdefender_plots()
+    r2s = display_evdefender_plots()
     display_ebola_plots()
     display_ebola_quadratic_samples()
 
