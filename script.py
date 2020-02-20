@@ -11,6 +11,14 @@ from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
 from math import floor
 
+# We'll use this later - x_max (in days elapsed) before ebola in a particular region switched from exponential to sigmoid
+# (determined by inspection, 2-3 readings before daily new cases/deaths peaked)
+X_CAPS = {
+        "cases": { "total": 440, "guinea": 410, "liberia": 435, "sierraleone": 425, },
+        "deaths": { "total": 435, "guinea": 400, "liberia": 465, "sierraleone": 420, },
+    }
+
+
 def display_evdefender_plots():
     # Load and select data from CSV
     data = pd.read_csv("data/coronavirus_data.csv")
@@ -57,7 +65,7 @@ def display_evdefender_plots():
     axs[0].set_xticklabels(["Jan {}".format(k) for k in range(27, 32)] + ["Feb {}".format(k) for k in range(1, 3)])
 
     plt.show()
-    return r2
+    return r2["quad"]
 
 
 def display_ebola_plots():
@@ -114,7 +122,7 @@ def display_ebola_plots():
     return
 
 
-def display_ebola_quadratic_samples():
+def display_ebola_quadratic_samples(r2s_evdef):
     # Load data from CSV
     data = pd.read_csv("data/ebola_2014_data.csv")
 
@@ -123,19 +131,13 @@ def display_ebola_quadratic_samples():
     datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
     days_elapsed = [(date - min(datetimes)).days for date in datetimes]
 
-    # set per-kind, per-loc caps on x to limit ourselves to exponential growth phase; determined by inspection
-    # (2-3 readings before report-by-report change in cases/deaths peaked)
-    caps = {
-            "cases": { "total": 440, "guinea": 410, "liberia": 435, "sierraleone": 425, },
-            "deaths": { "total": 435, "guinea": 400, "liberia": 465, "sierraleone": 420, },
-        }
-
+    # TODO: this should be 7-long windows
     # for each kind/loc combo, for each 6-long range of in-window reports, compute an R2 for a quadratic fit
     r2s = []
     for kind in ["cases", "deaths"]:
         for loc in ["total", "guinea", "liberia", "sierraleone"]:
             y_full = data["{}_{}".format(kind,loc)][::-1].values
-            for i_min in [x for x in range(len(days_elapsed) - 5) if days_elapsed[x] <= caps[kind][loc] and y_full[x] > 0]:
+            for i_min in [x for x in range(len(days_elapsed) - 5) if days_elapsed[x] <= X_CAPS[kind][loc] and y_full[x] > 0]:
                 x = np.array(days_elapsed[i_min:i_min+6]).reshape(-1,1)
                 y = y_full[i_min:i_min+6]
                 poly = PolynomialFeatures(degree = 2)
@@ -157,7 +159,7 @@ def display_ebola_quadratic_samples():
     ax.xaxis.set_minor_formatter(NullFormatter())
     ax.set_xticks([floor(min(r2s)*10.0) / 10, 0.9, 0.99, 0.999, 0.9999])
     # add the two points for @evdefender's cases and deaths R2 scores
-    x = np.array([0.9999, 0.9997])
+    x = np.array([r2s_evdef["cases"], r2s_evdef["deaths"]])
     y = np.zeros_like(x)
     ax.scatter(x, y, color='red', marker='^')
     ax.annotate("Feb 2 China\ncases R2", (x[0], y[0]), textcoords="offset pixels", xytext=(0,-40), ha="center", color="red", fontsize=9, weight="bold")
@@ -166,10 +168,30 @@ def display_ebola_quadratic_samples():
     return
 
 
+def display_ebola_quadratic_split_samples(r2s_evdef):
+    # Load data from CSV
+    data = pd.read_csv("data/ebola_2014_data.csv")
+
+    # Convert dates from strings to datetimes
+    dates = data["date"][::-1].values
+    datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
+    days_elapsed = [(date - min(datetimes)).days for date in datetimes]
+
+    for kind in ["cases", "deaths"]:
+        for loc in ["total", "guinea", "liberia", "sierraleone"]:
+            y_full = data["{}_{}".format(kind,loc)][::-1].values
+            # TODO: this should be 7-long windows
+            for i_min in [x for x in range(len(days_elapsed) - 5) if days_elapsed[x] <= X_CAPS[kind][loc] and y_full[x] > 0]:
+                # color it based on quality (e.g. >=1, >=5, >= 20 entries)
+                # repeat analysis above but in a 4x2 (regions x cases/deaths) plot grid, and color-code scatterpoints
+        
+
+
+
 if __name__ == "__main__":
-    r2s = display_evdefender_plots()
+    r2s_evdef = display_evdefender_plots()
     display_ebola_plots()
-    display_ebola_quadratic_samples()
+    display_ebola_quadratic_samples(r2s_evdef)
 
 
 
