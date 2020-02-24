@@ -17,6 +17,11 @@ X_CAPS = {
         "cases": { "total": 440, "guinea": 410, "liberia": 435, "sierraleone": 425, },
         "deaths": { "total": 435, "guinea": 400, "liberia": 465, "sierraleone": 420, },
     }
+SAMPLE_QUALITY_COLOR = [
+        (1, "brown"),
+        (50, "blue"),
+        (2500, "green"),
+        ]
 
 
 def display_evdefender_plots():
@@ -137,9 +142,9 @@ def display_ebola_quadratic_samples(r2s_evdef):
     for kind in ["cases", "deaths"]:
         for loc in ["total", "guinea", "liberia", "sierraleone"]:
             y_full = data["{}_{}".format(kind,loc)][::-1].values
-            for i_min in [x for x in range(len(days_elapsed) - 5) if days_elapsed[x] <= X_CAPS[kind][loc] and y_full[x] > 0]:
-                x = np.array(days_elapsed[i_min:i_min+6]).reshape(-1,1)
-                y = y_full[i_min:i_min+6]
+            for i_min in [x for x in range(len(days_elapsed) - 7) if days_elapsed[x] <= X_CAPS[kind][loc] and y_full[x] > 0]:
+                x = np.array(days_elapsed[i_min:i_min+7]).reshape(-1,1)
+                y = y_full[i_min:i_min+7]
                 poly = PolynomialFeatures(degree = 2)
                 x_poly = poly.fit_transform(x)
                 poly.fit(x_poly, y)
@@ -177,14 +182,43 @@ def display_ebola_quadratic_split_samples(r2s_evdef):
     datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
     days_elapsed = [(date - min(datetimes)).days for date in datetimes]
 
-    for kind in ["cases", "deaths"]:
-        for loc in ["total", "guinea", "liberia", "sierraleone"]:
+    fig, axs = plt.subplots(2, 4, sharex=True)  # 2 rows, 4 cols, 8 plots total
+    fig.suptitle("Cases and deaths R^2 values by region and min x_i")
+    for plot_row, kind in enumerate(["cases", "deaths"]):
+        axs[plot_row][0].set(ylabel=kind)
+        for plot_col, loc in enumerate(["total", "guinea", "liberia", "sierraleone"]):
+            axs[1][plot_col].set(xlabel=loc)
             y_full = data["{}_{}".format(kind,loc)][::-1].values
-            # TODO: this should be 7-long windows
-            for i_min in [x for x in range(len(days_elapsed) - 5) if days_elapsed[x] <= X_CAPS[kind][loc] and y_full[x] > 0]:
+            r2s = []
+            colors = []
+            for i_min in [x for x in range(len(days_elapsed) - 7) if days_elapsed[x] <= X_CAPS[kind][loc] and y_full[x] > 0]:
                 # color it based on quality (e.g. >=1, >=5, >= 20 entries)
                 # repeat analysis above but in a 4x2 (regions x cases/deaths) plot grid, and color-code scatterpoints
-        
+                x = np.array(days_elapsed[i_min:i_min+7]).reshape(-1,1)
+                y = y_full[i_min:i_min+7]
+                color = max([pair for pair in SAMPLE_QUALITY_COLOR if min(y) >= pair[0]])[1]
+                colors.append(color)
+                poly = PolynomialFeatures(degree = 2)
+                x_poly = poly.fit_transform(x)
+                poly.fit(x_poly, y)
+                lin2_reg = LinearRegression().fit(x_poly, y)
+                r2 = lin2_reg.score(poly.fit_transform(x), y)
+                r2s.append(r2)
+            x = np.array(r2s)
+            np.random.seed(0)  # make the jitter deterministic
+            y = np.random.normal(0, 1, len(x))
+            axs[plot_row][plot_col].set_xscale('logit')
+            axs[plot_row][plot_col].set_yticks([])
+            axs[plot_row][plot_col].scatter(x, y, alpha=0.4, color=colors)
+            axs[plot_row][plot_col].set_ylim([-10, 10])
+            axs[plot_row][plot_col].xaxis.set_major_formatter(FormatStrFormatter('%.4g'))
+            axs[plot_row][plot_col].xaxis.set_minor_formatter(NullFormatter())
+            axs[plot_row][plot_col].set_xticks([0.7, 0.9, 0.99, 0.999, 0.9999])
+            x = np.array([r2s_evdef[kind]])
+            y = np.zeros_like(x)
+            axs[plot_row][plot_col].scatter(x, y, color='red', marker='^')  # add R2 from China dataset for corresponding kind (cases, deaths)
+            axs[plot_row][plot_col].annotate("China R2", (x[0], y[0]), textcoords="offset pixels", xytext=(0,-20), ha="center", color="red", fontsize=9, weight="bold")
+    plt.show()
 
 
 
@@ -192,6 +226,7 @@ if __name__ == "__main__":
     r2s_evdef = display_evdefender_plots()
     display_ebola_plots()
     display_ebola_quadratic_samples(r2s_evdef)
+    display_ebola_quadratic_split_samples(r2s_evdef)
 
 
 
