@@ -17,18 +17,13 @@ X_CAPS = {
         "cases": { "total": 440, "guinea": 410, "liberia": 435, "sierraleone": 425, },
         "deaths": { "total": 435, "guinea": 400, "liberia": 465, "sierraleone": 420, },
     }
-SAMPLE_QUALITY_COLOR = [
-        (1, "brown"),
-        (50, "blue"),
-        (2500, "green"),
-        ]
 
 
 def display_evdefender_plots():
     # Load and select data from CSV
     data = pd.read_csv("data/coronavirus_data.csv")
 
-    # select data for [Jan 27, Feb 2], matching @evdefender's second plot
+    # select data for [Jan 27, Feb 2], matching @evdefender's second cases (not deaths!) plot
     window = data[["date", "cases_china_ex", "deaths_china_ex"]][7:14]
 
     # Fit quadratic and exp models to cases and deaths timeseries; find coeffs and R2s
@@ -53,17 +48,35 @@ def display_evdefender_plots():
             r2[fittype][kind] = r2_score(y[kind], y_predicted[fittype][kind])
             label[fittype][kind] += "; R2 = {}".format(round(r2[fittype][kind], 5))
 
+    # let's reproduce evdefender's mysteriously-truncated Feb 2 deaths plot as well, just to double-check the numbers
+    kind = "deaths_trunc"
+    for fittype in ["quad", "exp"]:
+        callback = fquadratic if fittype == "quad" else fexp
+        popt[fittype][kind], _ = curve_fit(callback, x[1:], y["deaths"][1:])  # skip first date, Jan 27
+        if fittype == "quad":
+            y_predicted[fittype][kind] = [callback(x_i, popt[fittype][kind][0], popt[fittype][kind][1], popt[fittype][kind][2]) for x_i in x[1:]]
+            label[fittype][kind] = "{}d^2 + {}d + {}".format(round(popt[fittype][kind][0], 2), round(popt[fittype][kind][1], 1), round(popt[fittype][kind][2], 1))
+        elif fittype == "exp":
+            y_predicted[fittype][kind] = [callback(x_i, popt[fittype][kind][0], popt[fittype][kind][1]) for x_i in x[1:]]
+            label[fittype][kind] = "{}*(1+{})^d".format(round(popt[fittype][kind][0], 2), round(popt[fittype][kind][1], 4))
+        r2[fittype][kind] = r2_score(y["deaths"][1:], y_predicted[fittype][kind])
+        label[fittype][kind] += "; R2 = {}".format(round(r2[fittype][kind], 5))
+
     # Plot fits for cases and deaths timeseries
-    fig, axs = plt.subplots(2, sharex=True)  # two vertically-stacked subplots
+    fig, axs = plt.subplots(3, sharex=True)  # three vertically-stacked subplots
     fig.suptitle("Quadratic fits and R2 scores")
-    for i, kind in enumerate(["cases", "deaths"]):
-        axs[i].scatter(x, y[kind], color='blue')
-        axs[i].set(ylabel="Confirmed China {}\nex-HK, Macau, Taipei".format(kind.capitalize()))
+    for i, kind in enumerate(["cases", "deaths_trunc", "deaths"]):
+        if kind == "deaths_trunc":
+            axs[i].scatter(x[1:], y["deaths"][1:], color='blue')
+            axs[i].set(ylabel="Confirmed China {}\nex-HK, Macau, Taipei".format("Deaths (trunc.)"))
+        else:
+            axs[i].scatter(x, y[kind], color='blue')
+            axs[i].set(ylabel="Confirmed China {}\nex-HK, Macau, Taipei".format(kind.capitalize()))
         axs[i].grid(axis='y')
         patches = []
         for fittype in ["quad", "exp"]:
             fittype_color = 'red' if fittype == "quad" else 'green'
-            axs[i].plot(x, y_predicted[fittype][kind], color=fittype_color)
+            axs[i].plot(x[1:] if kind == "deaths_trunc" else x, y_predicted[fittype][kind], color=fittype_color)
             patches.append(mpatches.Patch(color=fittype_color, label=label[fittype][kind]))
         axs[i].legend(handles=patches)
     axs[0].set_xticks(x)
@@ -116,7 +129,7 @@ def display_ebola_plots():
             y_predicted = [fsigmoid(x_i, popt[0], popt[1], popt[2]) for x_i in x]
             axs[isdeaths].plot(x, y_predicted, color = colors[loc][1])
 
-            label = "{}: {}/(1 + exp({}*(x-{})))".format(loc, round(popt[2], 3), round(popt[0], 3), round(popt[1], 3))
+            label = "{}: {}/(1 + exp({:.3f}*(x-{})))".format(loc, round(popt[2], 1), round(popt[0], 3), round(popt[1], 1))
             label += "; R2 = {}".format(round(r2_score(y, y_predicted), 4))
             results["labels"][kind][loc] = label
             patches.append(mpatches.Patch(color=colors[loc][1], label=label))
@@ -136,7 +149,6 @@ def display_ebola_quadratic_samples(r2s_evdef):
     datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
     days_elapsed = [(date - min(datetimes)).days for date in datetimes]
 
-    # TODO: this should be 7-long windows
     # for each kind/loc combo, for each 6-long range of in-window reports, compute an R2 for a quadratic fit
     r2s = []
     for kind in ["cases", "deaths"]:
@@ -181,6 +193,13 @@ def display_ebola_quadratic_split_samples(r2s_evdef):
     dates = data["date"][::-1].values
     datetimes = [datetime.datetime.strptime(datestr, '%d %b %Y') for datestr in dates]  # date of month, month abbrev., year
     days_elapsed = [(date - min(datetimes)).days for date in datetimes]
+
+    # We'll color-code each R2 dot in the scatterplots, by **min** counts observed in its window; higher is better
+    SAMPLE_QUALITY_COLOR = [
+            (1, "brown"),
+            (50, "blue"),
+            (2500, "green"),
+            ]
 
     fig, axs = plt.subplots(2, 4, sharex=True)  # 2 rows, 4 cols, 8 plots total
     fig.suptitle("Cases and deaths R^2 values by region and min x_i")
