@@ -64,7 +64,7 @@ def display_evdefender_plots():
 
     # Plot fits for cases and deaths timeseries
     fig, axs = plt.subplots(3, sharex=True)  # three vertically-stacked subplots
-    fig.suptitle("Quadratic fits and R2 scores")
+    fig.suptitle("Recreation of @evdefender Feb 2 China cases/deaths timeseries fits")
     for i, kind in enumerate(["cases", "deaths_trunc", "deaths"]):
         if kind == "deaths_trunc":
             axs[i].scatter(x[1:], y["deaths"][1:], color='blue')
@@ -97,7 +97,7 @@ def display_ebola_plots():
 
     # queue up plots - we'll add scatter plots and fits as we go
     fig, axs = plt.subplots(2, sharex=True)  # two vertically-stacked subplots
-    fig.suptitle("Ebola cases and death fits")
+    fig.suptitle("Quality of sigmoid fits to 2014 West African ebola epidemic in total + 3 regions")
 
     x = days_elapsed
 
@@ -134,6 +134,9 @@ def display_ebola_plots():
             results["labels"][kind][loc] = label
             patches.append(mpatches.Patch(color=colors[loc][1], label=label))
         axs[isdeaths].legend(handles=patches)
+        axs[isdeaths].grid(axis='y')
+        axs[isdeaths].set(ylabel=kind.capitalize())
+    axs[1].set(xlabel="Days elapsed")
 
     # Plot cases and death fits
     plt.show()
@@ -168,6 +171,7 @@ def display_ebola_quadratic_samples(r2s_evdef):
     np.random.seed(0)  # make the jitter deterministic
     y = np.random.normal(0, 1, len(x))
     fig, ax = plt.subplots()
+    fig.suptitle("Quadratic fit R2 distribution comparison between selected\n7-long Ebola epidemic windows and China [7-long] Feb 2 fits")
     ax.set_xscale('logit')
     ax.set_yticks([])
     ax.scatter(x, y, alpha=0.4)
@@ -202,7 +206,7 @@ def display_ebola_quadratic_split_samples(r2s_evdef):
             ]
 
     fig, axs = plt.subplots(2, 4, sharex=True)  # 2 rows, 4 cols, 8 plots total
-    fig.suptitle("Cases and deaths R^2 values by region and min x_i")
+    fig.suptitle("Breakdown of quadratic fit R2 distribution comparison by\nkind, region, and min observation in window")
     for plot_row, kind in enumerate(["cases", "deaths"]):
         axs[plot_row][0].set(ylabel=kind)
         for plot_col, loc in enumerate(["total", "guinea", "liberia", "sierraleone"]):
@@ -237,6 +241,8 @@ def display_ebola_quadratic_split_samples(r2s_evdef):
             y = np.zeros_like(x)
             axs[plot_row][plot_col].scatter(x, y, color='red', marker='^')  # add R2 from China dataset for corresponding kind (cases, deaths)
             axs[plot_row][plot_col].annotate("China R2", (x[0], y[0]), textcoords="offset pixels", xytext=(0,-20), ha="center", color="red", fontsize=9, weight="bold")
+    patches = [mpatches.Patch(color=pair[1], label='All observations in window >= {}'.format(pair[0])) for pair in SAMPLE_QUALITY_COLOR]
+    fig.legend(handles=patches)
     plt.show()
 
 
